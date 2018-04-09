@@ -26,6 +26,11 @@
             <plugin>
                 <groupId>com.spotify</groupId>
                 <artifactId>dockerfile-maven-plugin</artifactId>
+                <configuration>
+                    <buildArgs>
+                        <jarfile>target/${project.build.finalName}.jar</jarfile>
+                    </buildArgs>
+                </configuration>
             </plugin>
         </plugins>
     </build>

@@ -92,16 +92,19 @@ RUN curl -jkLH "Cookie: oraclelicense=accept-securebackup-cookie" -o java.tar.gz
 FROM scratch
 LABEL author="ilja@bobkevic.com"
 
+ARG jarfile
+ARG ROOTFS=/build/rootfs
+
 ENV LC_ALL=en_US.UTF-8
 ENV LANG=en_US.UTF-8
 ENV JAVA_HOME=/opt/jdk
 ENV PATH=${PATH}:${JAVA_HOME}/bin
-ENV ROOTFS=/build/rootfs
+ENV APP=/opt/$jarfile
 
 COPY --from=build $ROOTFS /
 
-COPY target/publisher-*.jar /usr/share/app/publisher.jar
+COPY $jarfile $APP
 
 EXPOSE 8080
 
-ENTRYPOINT ["/bin/bash", "-c", "exec /opt/jdk/bin/java $JVM_DEFAULT_ARGS $JVM_ARGS -jar /usr/share/app/publisher.jar \"$@\"", "bash"]
+ENTRYPOINT ["/bin/bash", "-c", "exec $JAVA_HOME/bin/java $JVM_DEFAULT_ARGS $JVM_ARGS -jar $APP \"$@\"", "bash"]
