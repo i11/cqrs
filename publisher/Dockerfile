@@ -105,6 +105,6 @@ COPY --from=build $ROOTFS /
 
 COPY $jarfile $APP
 
-EXPOSE 8080
+EXPOSE 8080 9080
 
 ENTRYPOINT ["/bin/bash", "-c", "exec $JAVA_HOME/bin/java $JVM_DEFAULT_ARGS $JVM_ARGS -jar $APP \"$@\"", "bash"]
