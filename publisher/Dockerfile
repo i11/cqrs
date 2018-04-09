@@ -102,4 +102,6 @@ COPY --from=build $ROOTFS /
 
 COPY target/publisher-*.jar /usr/share/app/publisher.jar
 
+EXPOSE 8080
+
 ENTRYPOINT ["/bin/bash", "-c", "exec /opt/jdk/bin/java $JVM_DEFAULT_ARGS $JVM_ARGS -jar /usr/share/app/publisher.jar \"$@\"", "bash"]
