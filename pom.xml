@@ -10,9 +10,11 @@
     <packaging>pom</packaging>
 
     <properties>
-        <java.version>1.8</java.version>
+        <java.version>10</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <jaxb.version>2.3.0</jaxb.version>
+        <jackson.version>2.9.5</jackson.version>
     </properties>
 
     <parent>
@@ -35,9 +37,19 @@
                 <version>0.43.0-beta</version>
             </dependency>
             <dependency>
+                <groupId>com.google.cloud</groupId>
+                <artifactId>google-cloud-bigtable</artifactId>
+                <version>0.43.0-alpha</version>
+            </dependency>
+            <dependency>
                 <groupId>com.fasterxml.jackson.datatype</groupId>
                 <artifactId>jackson-datatype-jdk8</artifactId>
-                <version>2.9.5</version>
+                <version>${jackson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.datatype</groupId>
+                <artifactId>jackson-datatype-jsr353</artifactId>
+                <version>${jackson.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -63,13 +75,13 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
         <!--<dependency>-->
-            <!--<groupId>org.springframework.boot</groupId>-->
-            <!--<artifactId>spring-boot-starter-security</artifactId>-->
+        <!--<groupId>org.springframework.boot</groupId>-->
+        <!--<artifactId>spring-boot-starter-security</artifactId>-->
         <!--</dependency>-->
         <!--<dependency>-->
-            <!--<groupId>org.springframework.security.oauth.boot</groupId>-->
-            <!--<artifactId>spring-security-oauth2-autoconfigure</artifactId>-->
-            <!--<version>2.0.0.RELEASE</version>-->
+        <!--<groupId>org.springframework.security.oauth.boot</groupId>-->
+        <!--<artifactId>spring-security-oauth2-autoconfigure</artifactId>-->
+        <!--<version>2.0.0.RELEASE</version>-->
         <!--</dependency>-->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -80,6 +92,10 @@
             <groupId>com.jayway.jsonpath</groupId>
             <artifactId>json-path</artifactId>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>javax.xml.bind</groupId>
+            <artifactId>jaxb-api</artifactId>
         </dependency>
     </dependencies>
 
@@ -102,9 +118,18 @@
                             </goals>
                         </execution>
                     </executions>
-                    <configuration>
-                        <repository>${project.artifactId}</repository>
-                    </configuration>
+                    <dependencies>
+                        <dependency>
+                            <groupId>org.codehaus.plexus</groupId>
+                            <artifactId>plexus-archiver</artifactId>
+                            <version>3.5</version>
+                        </dependency>
+                        <dependency>
+                            <groupId>javax.activation</groupId>
+                            <artifactId>javax.activation-api</artifactId>
+                            <version>1.2.0</version>
+                        </dependency>
+                    </dependencies>
                 </plugin>
             </plugins>
         </pluginManagement>

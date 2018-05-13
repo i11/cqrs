@@ -32,6 +32,17 @@ public final class Json {
     }
   }
 
+  public static <T> T uncheckedDeserialization(final ObjectMapper json,
+                                               final String serializedObject,
+                                               final TypeReference<T> typeReference) {
+    try {
+      return json.readValue(serializedObject, typeReference);
+    } catch (final IOException e) {
+      throw new UncheckedIOException("Failed deserializing: " + serializedObject + " as " + typeReference,
+          e);
+    }
+  }
+
   public static <T> Optional<T> neglectingDeserialization(final ObjectMapper json,
                                                           final String serializedObject,
                                                           final TypeReference<T> typeReference) {

@@ -4,12 +4,11 @@ ARG ROOTFS=/build/rootfs
 ARG DEBS=/build/debs
 ARG REQUIRED_PACKAGES="coreutils bash zlib1g libtinfo5 libselinux1"
 
-ARG JAVA_VERSION_MAJOR=8
-ARG JAVA_VERSION_MINOR=172
-ARG JAVA_VERSION_BUILD=11
-ARG JAVA_PACKAGE=server-jre
-ARG JAVA_SHA256_SUM=3d0a5db2300423a1fd6ee25c229dbd5320d79204c73844337f5b6a082d58541f
-ARG JAVA_URL_ELEMENT=a58eab1ec242421181065cdc37240b08
+ARG JAVA_VERSION=10.0.1
+ARG JAVA_VERSION_BUILD=10
+ARG JAVA_PACKAGE=serverjre
+ARG JAVA_SHA256_SUM=9c22d2f232c8a298c6fdea12356042814655dec3db24c2b0ff096b21f2c36e43
+ARG JAVA_URL_ELEMENT=fb4372174a714e6b8c52526dc134031e
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -60,34 +59,10 @@ RUN apt-get install -y ca-certificates ca-certificates-java \
 
 # Java
 RUN curl -jkLH "Cookie: oraclelicense=accept-securebackup-cookie" -o java.tar.gz\
-    http://download.oracle.com/otn-pub/java/jdk/${JAVA_VERSION_MAJOR}u${JAVA_VERSION_MINOR}-b${JAVA_VERSION_BUILD}/${JAVA_URL_ELEMENT}/${JAVA_PACKAGE}-${JAVA_VERSION_MAJOR}u${JAVA_VERSION_MINOR}-linux-x64.tar.gz &&\
+    http://download.oracle.com/otn-pub/java/jdk/${JAVA_VERSION}+${JAVA_VERSION_BUILD}/${JAVA_URL_ELEMENT}/${JAVA_PACKAGE}-${JAVA_VERSION}_linux-x64_bin.tar.gz &&\
   echo "$JAVA_SHA256_SUM  java.tar.gz" | sha256sum -c - &&\
   gunzip -c java.tar.gz | tar -xf - -C $ROOTFS/opt && rm -f java.tar.gz &&\
-  ln -s /opt/jdk1.${JAVA_VERSION_MAJOR}.0_${JAVA_VERSION_MINOR} $ROOTFS/opt/jdk &&\
-  curl -jkLH "Cookie: oraclelicense=accept-securebackup-cookie" -o jce_policy-8.zip http://download.oracle.com/otn-pub/java/jce/8/jce_policy-8.zip &&\
-  unzip jce_policy-8.zip -d /tmp &&\
-  cp /tmp/UnlimitedJCEPolicyJDK8/*.jar $ROOTFS/opt/jdk1.${JAVA_VERSION_MAJOR}.0_${JAVA_VERSION_MINOR}/jre/lib/security/ &&\
-  rm -rf jce_policy-8.zip /tmp/UnlimitedJCEPolicyJDK8 &&\
-  rm -rf $ROOTFS/opt/jdk1.${JAVA_VERSION_MAJOR}.0_${JAVA_VERSION_MINOR}/*src.zip \
-         $ROOTFS/opt/jdk1.${JAVA_VERSION_MAJOR}.0_${JAVA_VERSION_MINOR}/lib/missioncontrol \
-         $ROOTFS/opt/jdk1.${JAVA_VERSION_MAJOR}.0_${JAVA_VERSION_MINOR}/lib/visualvm \
-         $ROOTFS/opt/jdk1.${JAVA_VERSION_MAJOR}.0_${JAVA_VERSION_MINOR}/lib/*javafx* \
-         $ROOTFS/opt/jdk1.${JAVA_VERSION_MAJOR}.0_${JAVA_VERSION_MINOR}/jre/lib/plugin.jar \
-         $ROOTFS/opt/jdk1.${JAVA_VERSION_MAJOR}.0_${JAVA_VERSION_MINOR}/jre/lib/ext/jfxrt.jar \
-         $ROOTFS/opt/jdk1.${JAVA_VERSION_MAJOR}.0_${JAVA_VERSION_MINOR}/jre/bin/javaws \
-         $ROOTFS/opt/jdk1.${JAVA_VERSION_MAJOR}.0_${JAVA_VERSION_MINOR}/jre/lib/javaws.jar \
-         $ROOTFS/opt/jdk1.${JAVA_VERSION_MAJOR}.0_${JAVA_VERSION_MINOR}/jre/lib/desktop \
-         $ROOTFS/opt/jdk1.${JAVA_VERSION_MAJOR}.0_${JAVA_VERSION_MINOR}/jre/plugin \
-         $ROOTFS/opt/jdk1.${JAVA_VERSION_MAJOR}.0_${JAVA_VERSION_MINOR}/jre/lib/deploy* \
-         $ROOTFS/opt/jdk1.${JAVA_VERSION_MAJOR}.0_${JAVA_VERSION_MINOR}/jre/lib/*javafx* \
-         $ROOTFS/opt/jdk1.${JAVA_VERSION_MAJOR}.0_${JAVA_VERSION_MINOR}/jre/lib/*jfx* \
-         $ROOTFS/opt/jdk1.${JAVA_VERSION_MAJOR}.0_${JAVA_VERSION_MINOR}/jre/lib/amd64/libdecora_sse.so \
-         $ROOTFS/opt/jdk1.${JAVA_VERSION_MAJOR}.0_${JAVA_VERSION_MINOR}/jre/lib/amd64/libprism_*.so \
-         $ROOTFS/opt/jdk1.${JAVA_VERSION_MAJOR}.0_${JAVA_VERSION_MINOR}/jre/lib/amd64/libfxplugins.so \
-         $ROOTFS/opt/jdk1.${JAVA_VERSION_MAJOR}.0_${JAVA_VERSION_MINOR}/jre/lib/amd64/libglass.so \
-         $ROOTFS/opt/jdk1.${JAVA_VERSION_MAJOR}.0_${JAVA_VERSION_MINOR}/jre/lib/amd64/libgstreamer-lite.so \
-         $ROOTFS/opt/jdk1.${JAVA_VERSION_MAJOR}.0_${JAVA_VERSION_MINOR}/jre/lib/amd64/libjavafx*.so \
-         $ROOTFS/opt/jdk1.${JAVA_VERSION_MAJOR}.0_${JAVA_VERSION_MINOR}/jre/lib/amd64/libjfx*.so
+  ln -s /opt/jdk-${JAVA_VERSION} $ROOTFS/opt/jdk
 
 FROM scratch
 LABEL author="ilja@bobkevic.com"
@@ -107,4 +82,4 @@ COPY $jarfile $APP
 
 EXPOSE 8080 9080
 
-ENTRYPOINT ["/bin/bash", "-c", "exec $JAVA_HOME/bin/java $JVM_DEFAULT_ARGS $JVM_ARGS -jar $APP \"$@\"", "bash"]
+ENTRYPOINT ["/bin/bash", "-c", "exec $JAVA_HOME/bin/java $JVM_DEFAULT_ARGS $JVM_ARGS --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.nio=ALL-UNNAMED -jar $APP \"$@\"", "bash"]
