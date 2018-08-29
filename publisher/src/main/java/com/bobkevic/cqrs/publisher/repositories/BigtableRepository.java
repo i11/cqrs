@@ -1,7 +1,6 @@
 package com.bobkevic.cqrs.publisher.repositories;
 
 import static com.bobkevic.cqrs.publisher.ApiToCompletableFutureHelper.toCompletableFuture;
-import static com.bobkevic.cqrs.publisher.dtos.Message.STRING_MAP_TYPE_REFERENCE;
 import static com.bobkevic.cqrs.publisher.utils.Json.uncheckedSerialization;
 import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.stream.Collectors.toList;
@@ -12,18 +11,21 @@ import com.bobkevic.cqrs.publisher.cache.AsyncCache;
 import com.bobkevic.cqrs.publisher.cache.CompletableFutureCacheBuilder;
 import com.bobkevic.cqrs.publisher.dtos.ImmutableMessage;
 import com.bobkevic.cqrs.publisher.dtos.Message;
-import com.bobkevic.cqrs.publisher.utils.Json;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.api.gax.rpc.AlreadyExistsException;
 import com.google.bigtable.admin.v2.ColumnFamily;
 import com.google.bigtable.admin.v2.Table;
+import com.google.bigtable.v2.RowFilter;
 import com.google.cloud.ServiceOptions;
 import com.google.cloud.bigtable.admin.v2.BigtableTableAdminClient;
 import com.google.cloud.bigtable.data.v2.BigtableDataClient;
 import com.google.cloud.bigtable.data.v2.models.Query;
 import com.google.cloud.bigtable.data.v2.models.Row;
+import com.google.cloud.bigtable.data.v2.models.RowCell;
 import com.google.cloud.bigtable.data.v2.models.RowMutation;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
 import com.google.protobuf.ByteString;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -67,7 +69,11 @@ public class BigtableRepository implements Repository {
                               .of(ServiceOptions.getDefaultProjectId(), destinationSplit[0]),
                           destinationSplit[1],
                           Table.newBuilder()
-                              .putColumnFamilies("messages", ColumnFamily.getDefaultInstance())
+                              .putColumnFamilies("name", ColumnFamily.getDefaultInstance())
+                              .putColumnFamilies("correlation_id",
+                                  ColumnFamily.getDefaultInstance())
+                              .putColumnFamilies("data", ColumnFamily.getDefaultInstance())
+                              .putColumnFamilies("attributes", ColumnFamily.getDefaultInstance())
                               .build()
                       );
                     } catch (final AlreadyExistsException aee) {
@@ -102,7 +108,7 @@ public class BigtableRepository implements Repository {
     final String[] sourceSplit = source.split("/");
 
     if (sourceSplit.length < 2) {
-      throw new RuntimeException("Current repositry expects the following source format: {}/{}");
+      throw new RuntimeException("Current repository expects the following source format: {}/{}");
     }
     return sourceSplit;
   }
@@ -133,12 +139,21 @@ public class BigtableRepository implements Repository {
   // TODO: null vs. empty
   private RowMutation getRowMutation(final String table, final UUID key, final Message message) {
     final RowMutation rowMutation = RowMutation.create(table, key.toString())
-        .setCell("messages", "name", message.name())
-        .setCell("messages", ByteString.copyFromUtf8("data"), message.asTypedByteString(json))
-        .setCell("messages", "correlation_id",
-            message.correlationId().orElse(key).toString())
-        .setCell("messages", "attributes",
-            uncheckedSerialization(json, message.attributes().orElse(Collections.emptyMap())));
+        .setCell("name", "", message.name())
+        .setCell("correlation_id", "",
+            message.correlationId().orElse(key).toString());
+
+    message.messageAsMap(json)
+        .ifPresent(msg -> msg.entrySet()
+            .forEach(entry -> rowMutation
+                .setCell("data", entry.getKey(), uncheckedSerialization(json, entry.getValue()))));
+
+    message.attributes()
+        .ifPresent(attrs -> attrs.entrySet()
+            .forEach(entry -> rowMutation
+                .setCell("attributes", entry.getKey(),
+                    uncheckedSerialization(json, entry.getValue()))));
+
     return rowMutation;
   }
 
@@ -151,23 +166,96 @@ public class BigtableRepository implements Repository {
     final String[] sourceSplit = sourceSplit(source);
 
     return dataClientCache.get(source)
-        .thenApply(client ->
-            stream(client.readRows(Query.create(sourceSplit[1]).rowKey(value)).spliterator(), false)
+        .thenApply(client -> {
+          if ("row_key".equals(key)) {
+            return stream(client.readRows(Query.create(sourceSplit[1]).rowKey(value).limit(limit))
+                    .spliterator(),
+                false)
                 .map(this::toMessage)
                 .collect(toList())
-                .iterator());
+                .iterator();
+          }
+
+          final RowFilter familyKeyFilter =
+              RowFilter.newBuilder().setFamilyNameRegexFilter(String.format("^%s", key)).build();
+
+          final RowFilter dataKeyFilter = RowFilter.newBuilder().setChain(
+              RowFilter.Chain.newBuilder()
+                  .addFilters(RowFilter.newBuilder().setFamilyNameRegexFilter("^data$").build())
+                  .addFilters(RowFilter.newBuilder().setColumnQualifierRegexFilter(
+                      ByteString.copyFromUtf8(String.format("^%s", key))).build())
+                  .build())
+              .build();
+
+          final RowFilter attributesKeyFilter = RowFilter.newBuilder().setChain(
+              RowFilter.Chain.newBuilder()
+                  .addFilters(
+                      RowFilter.newBuilder().setFamilyNameRegexFilter("^attributes").build())
+                  .addFilters(RowFilter.newBuilder().setColumnQualifierRegexFilter(
+                      ByteString.copyFromUtf8(String.format("^%s", key))).build())
+                  .build())
+              .build();
+
+          final RowFilter valueFilter = RowFilter.newBuilder()
+              .setValueRegexFilter(ByteString.copyFromUtf8(String.format("^%s$", value)))
+              .build();
+
+          final RowFilter familyKeyValueFilter =
+              RowFilter.newBuilder().setChain(RowFilter.Chain.newBuilder()
+                  .addFilters(familyKeyFilter)
+                  .addFilters(valueFilter)
+                  .build())
+                  .build();
+
+          final RowFilter dataKeyValueFilter =
+              RowFilter.newBuilder().setChain(RowFilter.Chain.newBuilder()
+                  .addFilters(dataKeyFilter)
+                  .addFilters(valueFilter)
+                  .build())
+                  .build();
+
+          final RowFilter attributesKeyValueFilter =
+              RowFilter.newBuilder().setChain(RowFilter.Chain.newBuilder()
+                  .addFilters(attributesKeyFilter)
+                  .addFilters(valueFilter)
+                  .build())
+                  .build();
+
+          return stream(client.readRows(Query.create(sourceSplit[1]).filter(() ->
+                  RowFilter.newBuilder()
+                      .setInterleave(RowFilter.Interleave.newBuilder()
+                          .addFilters(familyKeyValueFilter)
+                          .addFilters(dataKeyValueFilter)
+                          .addFilters(attributesKeyValueFilter)
+                          .build())
+                      .build()
+              )).spliterator(),
+              false)
+              .map(this::toMessage)
+              .collect(toList())
+              .iterator();
+        });
   }
 
   private Message toMessage(final Row row) {
-    final Map<String, String> rowMap = row.getCells().stream()
-        .collect(toMap(cell -> cell.getQualifier().toStringUtf8(),
-            cell -> cell.getValue().toStringUtf8()));
+    final Map<String, Map<String, String>> rowMap = row.getCells().stream()
+        .collect(
+            toMap(RowCell::getFamily,
+                cell -> ImmutableMap
+                    .of(cell.getQualifier().toStringUtf8(), cell.getValue().toStringUtf8()),
+                (firstValue, secondValue) -> {
+                  final Map<String, String> mule = Maps.newHashMap(firstValue);
+                  mule.putAll(secondValue);
+                  return mule;
+                }
+            )
+        );
+
     return ImmutableMessage.builder()
-        .name(rowMap.get("name"))
-        .message(Json.uncheckedDeserialization(json, rowMap.get("data"), ObjectNode.class))
-        .correlationId(UUID.fromString(rowMap.get("correlation_id")))
-        .attributes(Json.uncheckedDeserialization(json, rowMap.get("attributes"),
-            STRING_MAP_TYPE_REFERENCE))
+        .name(rowMap.get("name").get(""))
+        .message(json.convertValue(rowMap.get("data"), ObjectNode.class))
+        .correlationId(UUID.fromString(rowMap.get("correlation_id").get("")))
+        .attributes(Optional.ofNullable(rowMap.get("attributes")).orElse(Collections.emptyMap()))
         .build();
   }
 }
